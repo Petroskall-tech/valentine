@@ -7,63 +7,65 @@
 <title>Laloo Love Rain</title>
 
 <style>
-html,body{
-  margin:0;
-  padding:0;
-  width:100%;
-  height:100%;
-  background:transparent;
-  overflow:hidden;
-}
-
-#laloo-rain{
-  position:fixed;
-  inset:0;
-  pointer-events:none;
-  z-index:9999;
-}
-
-/* κοινό element */
-.laloo-item{
-  position:absolute;
-  top:-140px;
-  opacity:0.9;
-  animation: laloo-fall linear forwards;
-}
-
-/* μπουκαλάκι – πιο luxury */
-.laloo-item.bottle{
-  opacity:1;
-  filter: drop-shadow(0 12px 22px rgba(0,0,0,0.18));
-}
-
-/* animation */
-@keyframes laloo-fall{
-  0%{
-    transform: translateY(0) rotate(0deg);
-    opacity:0;
+  html,body{
+    margin:0;
+    padding:0;
+    width:100%;
+    height:100%;
+    background:transparent;
+    overflow:hidden;
   }
-  10%{ opacity:1; }
-  100%{
-    transform: translateY(110vh) rotate(360deg);
-    opacity:0;
-  }
-}
 
-/* accessibility */
-@media (prefers-reduced-motion: reduce){
-  #laloo-rain{ display:none; }
-}
+  #laloo-rain{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:9999;
+    contain: layout paint style; /* μικρό boost */
+  }
+
+  /* κοινό element */
+  .laloo-item{
+    position:absolute;
+    top:-140px;
+    opacity:0.9;
+    will-change: transform, opacity;
+    animation: laloo-fall linear forwards;
+    transform: translate3d(0,0,0); /* GPU-friendly */
+  }
+
+  /* μπουκαλάκι – πιο luxury (αλλά πιο light shadow) */
+  .laloo-item.bottle{
+    opacity:1;
+    filter: drop-shadow(0 8px 14px rgba(0,0,0,0.14));
+  }
+
+  /* animation */
+  @keyframes laloo-fall{
+    0%{
+      transform: translate3d(0,0,0) rotate(0deg);
+      opacity:0;
+    }
+    10%{ opacity:1; }
+    100%{
+      transform: translate3d(0,110vh,0) rotate(360deg);
+      opacity:0;
+    }
+  }
+
+  /* accessibility */
+  @media (prefers-reduced-motion: reduce){
+    #laloo-rain{ display:none; }
+  }
 </style>
 </head>
 
 <body>
 
-<div id="laloo-rain"></div>
+<div id="laloo-rain" aria-hidden="true"></div>
 
 <script>
 (function(){
-
   /* ASSETS – FULL URLs */
   const ASSETS = [
     {
@@ -92,8 +94,9 @@ html,body{
   const container = document.getElementById('laloo-rain');
   const isMobile = window.matchMedia('(max-width:768px)').matches;
 
-  const MAX_ITEMS = isMobile ? 18 : 28;
-  const SPAWN_EVERY = isMobile ? 550 : 420;
+  // ✅ πιο "safe" defaults (μπορείς να τα ανεβάσεις λίγο αν θες)
+  const MAX_ITEMS   = isMobile ? 14 : 22;
+  const SPAWN_EVERY = isMobile ? 650 : 520;
 
   function pickAsset(){
     const r = Math.random();
@@ -116,21 +119,37 @@ html,body{
     el.alt = '';
     el.decoding = 'async';
 
-    const size =
-      Math.random() * (a.size[1] - a.size[0]) + a.size[0];
-    const duration =
-      Math.random() * (a.duration[1] - a.duration[0]) + a.duration[0];
+    // ✅ βοηθάει να μην "κλέβει" bandwidth/priority
+    el.loading = 'lazy';
+    try{ el.fetchPriority = 'low'; }catch(e){}
+
+    const size = Math.random() * (a.size[1] - a.size[0]) + a.size[0];
+    const duration = Math.random() * (a.duration[1] - a.duration[0]) + a.duration[0];
 
     el.style.width = size + 'px';
     el.style.left = Math.random() * 100 + 'vw';
     el.style.animationDuration = duration + 's';
 
+    // ✅ remove όταν τελειώσει το animation (όχι fixed 15s)
+    el.addEventListener('animationend', () => el.remove(), { once:true });
+
     container.appendChild(el);
 
-    setTimeout(() => el.remove(), 15000);
+    // ✅ failsafe (σε περίπτωση που δεν fired το animationend)
+    setTimeout(() => el.remove(), Math.ceil((duration + 2) * 1000));
   }
 
-  setInterval(spawn, SPAWN_EVERY);
+  // ✅ pause όταν το tab είναι στο background (ρίχνει resources)
+  let timer = setInterval(spawn, SPAWN_EVERY);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      clearInterval(timer);
+      timer = null;
+    } else if (!timer) {
+      timer = setInterval(spawn, SPAWN_EVERY);
+    }
+  });
 
 })();
 </script>
